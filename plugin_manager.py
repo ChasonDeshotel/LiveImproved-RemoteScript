@@ -2,6 +2,7 @@ import Live
 from ableton.v2.control_surface.component import Component
 from typing import Optional, Tuple, Any
 import logging
+import os
 
 class PluginManager(Component):
     def __init__(self, manager):
@@ -29,7 +30,7 @@ class PluginManager(Component):
                     for child in item.children:
                         find_loadable_items(child, loadable_items, depth + 1, max_depth)
             # newline so you know it's complete
-            f.write(f"\n")
+            #f.write(f"\n")
             return loadable_items
 
         self.manager.logger.info("starting cache");
@@ -40,7 +41,7 @@ class PluginManager(Component):
         application = Live.Application.get_application()
         browser = application.browser
 
-        f = open(self.manager.module_path + '/' + "loadable_items.txt", "w")
+        f = open(os.path.join(self.manager.module_path, "loadable_items.txt"), "w")
 
         try:
             #AU, VST, VST3

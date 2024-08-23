@@ -1,96 +1,166 @@
 import Live
 from ableton.v2.control_surface.component import Component
 from typing import Optional, Tuple, Any
-import logging
 import os
 import errno
+import select
 
 class IPCUtils(Component):
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            cls._instance = super(IPCUtils, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self, manager):
-        super().__init__(manager)
-
         self.manager = manager
-
-        self.is_written = False
+        self.logger = self.manager.logger
         self.is_writing = False
+        self.pipe_fd_write = None
+        self.pipe_fd_read = None
 
-        self.pipe_fd_read = self.open_pipe(filename='pipe', mode='ro')
-        self.pipe_fd_write = self.open_pipe(filename='pipe', mode='wo')
+        self.is_read_initialized = False
 
-    def read(self, fh):
-        rlist, _, _ = select.select([self.pipe_fd], [], [], 0)
+        ##
+        ##
+        ## fix
+        self.is_write_initialized = False
+
+        # ableton script reads requests from lim_request
+        # and responds to lim_response
+        self.response_pipe_path = os.path.join(self.manager.module_path, 'lim_response')
+        self.request_pipe_path = os.path.join(self.manager.module_path, 'lim_request')
+
+    def init_write(self):
+        """Try to write the 'READY' message to the response pipe."""
+        self.manager.logger.info("IPC::init_write() called")
+
+        if not self.check_or_create_pipe(self.response_pipe_path):
+            self.logger.info("IPC::init_write() failed to create or find the response pipe")
+            return False
+
+        if not self.open_pipe_for_write(self.response_pipe_path, non_blocking=True):
+            self.manager.logger.info("IPC::init_write() failed to open response pipe for writing")
+
+            self.manager.logger.info(f"scheduling the next write pipe check")
+            self.manager.schedule_message(1, self.init_write)
+            return False
+
+        self.write_response("READY")
+        self.manager.logger.info("READY written to response pipe")
+        self.is_write_initialized = True
+        return True
+
+
+    def init_read(self):
+        """Initialize the read pipe to receive requests."""
+        self.manager.logger.info("IPC::init_read() called")
+
+        if not self.check_or_create_pipe(self.request_pipe_path):
+            self.logger.info("IPC::init_read() failed to create or find the request pipe")
+            return False
+
+        if not self.open_pipe_for_read(self.request_pipe_path, non_blocking=True):
+            self.manager.logger.info("IPC::init_read() failed to open request pipe for reading")
+            self.manager.logger.info("scheduling the next read pipe check")
+            self.manager.schedule_message(1, self.init_read)
+            return False
+
+        self.manager.logger.info("Request pipe successfully opened for reading")
+        self.is_read_initialized = True
+        return True
+
+    def check_or_create_pipe(self, pipe_name: str) -> bool:
+        """Check if the pipe exists, and if not, create it."""
+        if not os.path.exists(pipe_name):
+            try:
+                os.mkfifo(pipe_name)
+                self.manager.logger.info(f"Pipe created: {pipe_name}")
+                return True
+            except OSError as e:
+                self.manager.logger.info(f"Failed to create pipe: {pipe_name} - {e}")
+                return False
+        else:
+            self.logger.info(f"Pipe already exists: {pipe_name}")
+        return True
+
+    def open_pipe_for_write(self, pipe_name: str, non_blocking: bool) -> bool:
+        """Open the pipe for writing."""
+        flags = os.O_WRONLY
+        if non_blocking:
+            flags |= os.O_NONBLOCK
+
+        try:
+            self.pipe_fd_write = os.open(pipe_name, flags)
+            self.manager.logger.info(f"Pipe opened for writing: {pipe_name}")
+            return True
+        except OSError as e:
+            self.manager.logger.info(f"Failed to open pipe for writing: {pipe_name} - {e}")
+            
+        return False
+
+    def open_pipe_for_read(self, pipe_name: str, non_blocking: bool) -> bool:
+        """Open the pipe for reading."""
+        flags = os.O_RDONLY
+        if non_blocking:
+            flags |= os.O_NONBLOCK
+
+        try:
+            self.pipe_fd_read = os.open(pipe_name, flags)
+            self.manager.logger.info(f"Pipe opened for reading: {pipe_name}")
+            return True
+        except OSError as e:
+            self.manager.logger.info(f"Failed to open pipe for reading: {pipe_name} - {e}")
+            return False
+
+
+    def read_request(self):
+        """Helper method to read a request from the request pipe."""
+        self.manager.logger.info("read request")
+        data = self.read_from_pipe(self.pipe_fd_read)
+        if data:
+            return data.decode('utf-8')
+        return None
+
+    def read_from_pipe(self, fh):
+        rlist, _, _ = select.select([fh], [], [], 0)
         if rlist:
             data = os.read(fh, 1024)
             if data:
                 self.manager.logger.info(f"Read data from pipe: {data}")
-                #process_data(data)
+                return data
             else:
                 self.manager.logger.info("No data available in pipe")
-        return data
+                return
 
-    def write(self, fh):
-        try:
-            if self.is_written == False and self.is_writing == False:
-                self.manager.logger.info("calling write pipe")
-                self.is_writing = True
-                #response = f"{action_id},completed"
-                response = "foobar"
-                response_length = len(response)
-                header = f"{response_length:04d}"  # Create a 4-character wide header
-                os.write(fh, (header + response).encode())
-                self.is_written = True
+    def write_response(self, response: str):
+        """Helper method to write a response to the response pipe."""
+        return self.write_to_pipe(response)
+
+    def write_to_pipe(self, response):
+        self.manager.logger.info("calling write_to_pipe")
+
+        if not self.pipe_fd_write:
+            self.manager.logger.info("no write pipe exists")
+            return False
+
+        if self.is_writing == False:
+            self.manager.logger.info("calling write pipe")
+
+            self.is_writing = True
+            response_length = len(response)
+            header = f"{response_length:04d}"  # Create a 4-character wide header
+            try:
+                self.manager.logger.info("calling os write")
+                os.write(self.pipe_fd_write, (header + response).encode())
+                self.manager.logger.info("after os write")
+            except Exception as e:
+                self.manager.logger.info(f"write failed: {e}")
                 self.is_writing = False
-                self.manager.logger.info("wrote to pipe")
-        except OSError as e:
-            self.manager.logger.error(f"Error writing to pipe: {e}")
+                return False
+            
+            self.is_writing = False
+            self.manager.logger.info("wrote to pipe")
+            return True
 
-    def open_pipe(self, **kwargs):
-        # os.join or something
-        file_path = self.manager.module_path + '/' + kwargs['filename']
-        self.manager.logger.info(f"attempting to open pipe at: {file_path}")
-
-        try:
-            os.mkfifo(file_path)
-        except OSError as e:
-            if e.errno != errno.EEXIST:
-                raise
-
-        try:
-            if kwargs.get('mode') == 'ro':
-                handle = os.open(file_path, os.O_RDONLY | os.O_NONBLOCK)
-            elif kwargs.get('mode') == 'wo':
-                handle = os.open(file_path, os.O_WRONLY | os.O_NONBLOCK)
-            else:
-                self.manager.logger.info("only supports ro or wo")
-                return None;
-            self.manager.logger.info(f"Successfully opened pipe with fd: {handle}")
-            return handle
-        except OSError as e:
-            self.manager.logger.info(f"Failed to open pipe: {e}")
-            return None;
-
-
-#    def mem_test(self):
-#        logger.info(sys.version_info)
-#        SHM_NAME = "/my_shared_memory"
-#        SHM_SIZE = 1024
-#
-#        # Open the shared memory
-#        sys.path.append('/Users/cdeshotel/Scripts/Ableton/InterceptKeys/build/lib.macosx-13.0-x86_64-cpython-312')shm = posix_ipc.SharedMemory(SHM_NAME, posix_ipc.O_CREAT, size=SHM_SIZE)
-#
-#        # Map the shared memory into the address space
-#        with mmap.mmap(shm.fd, SHM_SIZE, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE) as mm:
-#            # Read data from shared memory
-#            data = mm[:SHM_SIZE].rstrip(b'\x00').decode('utf-8')
-#            logger.info(f"Read from shared memory: {data}")
-#
-#            # Write data to shared memory
-#            message = "Hello from Python!"
-#            mm.seek(0)  # Go to the beginning of the memory
-#            mm.write(message.encode('utf-8'))
-#
-#            data = mm[:SHM_SIZE].rstrip(b'\x00').decode('utf-8')
-#            logger.info(f"Read from shared memory: {data}")
-#
-#        # Clean up
-#        shm.close_fd()
