@@ -12,7 +12,7 @@ from .ipc_utils import IPCUtils
 from .event_processor import EventProcessor
 from .plugin_manager import PluginManager
 
-logger = logging.getLogger("lee")
+logger = logging.getLogger("Lim")
 
 class Manager(ControlSurface):
     def __init__(self, c_instance):
@@ -23,7 +23,7 @@ class Manager(ControlSurface):
 
         self.log_level = "info"
         self.start_logging()
-        logger.info("LEE: started")
+        logger.info("Lim: started")
 
         with self.component_guard():
             self.ipc = IPCUtils(self)
