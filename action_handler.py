@@ -22,7 +22,7 @@ class ActionHandler(Component):
         parsed_commands = []
         for command in commands:
             parts = command.split(',')
-            action = parts[0]
+            action = parts[0].lower()
             parameters = parts[1:] if len(parts) > 1 else []
             parsed_commands.append((action, parameters))
 
@@ -32,6 +32,13 @@ class ActionHandler(Component):
             method(*params)
         else:
             print(f"No such action: {action}")
+
+    def ready(self):
+        self.logger.info(f"library ready, increasing tick frequency")
+        self.manager.tickInterval = 1;
+
+    def plugins(self):
+        self.manager.ipc.write_response(",".join([item.name for item in self.manager.plugin_manager.loadable_items()]));
 
     def load_item(self, *items):
         self.logger.info(f"calling load_item with params: {', '.join(items)}")

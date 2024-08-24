@@ -12,8 +12,10 @@ class PluginManager(Component):
 
         self.cached_plugin_data = []
 
-    def cache_plugins(self):
+    def loadable_items(self):
+        return self.cached_plugin_data;
 
+    def cache_plugins(self):
         def find_loadable_items(item, loadable_items=None, depth=0, max_depth=5):
             if loadable_items is None:
                 loadable_items = []

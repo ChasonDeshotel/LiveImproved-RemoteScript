@@ -20,6 +20,7 @@ class Manager(ControlSurface):
         ControlSurface.__init__(self, c_instance)
 
         self.logger = logger
+        self.tickInterval = 5;
         self.module_path = os.path.dirname(os.path.realpath(__file__))
 
         self.log_level = "info"
@@ -48,7 +49,7 @@ class Manager(ControlSurface):
         ## TODO: receive a READY signal from the injected library
         ## then shorten the tick
         ##
-        self.schedule_message(5, self.main_loop)
+        self.schedule_message(self.tickInterval, self.main_loop)
 
     def init(self):
         """Initialize the read and write pipes."""
