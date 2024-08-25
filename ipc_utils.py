@@ -145,22 +145,46 @@ class IPCUtils(Component):
             self.manager.logger.info("no write pipe exists")
             return False
 
-        if self.is_writing == False:
-            self.manager.logger.info("calling write pipe")
+        if not self.is_writing:
+            self.manager.logger.info("starting write process")
 
             self.is_writing = True
             response_length = len(response)
-            header = f"{response_length:04d}"  # Create a 4-character wide header
-            try:
-                self.manager.logger.info("calling os write")
-                os.write(self.pipe_fd_write, (header + response).encode())
-                self.manager.logger.info("after os write")
-            except Exception as e:
-                self.manager.logger.info(f"write failed: {e}")
-                self.is_writing = False
-                return False
-            
-            self.is_writing = False
-            self.manager.logger.info("wrote to pipe")
-            return True
+            header = f"{response_length:08d}"  # Create a 4-character wide header
+            message = header + response
+            self.message_bytes = message.encode()
+            self.total_written = 0
+            self.chunk_size = 1024  # Define the chunk size, e.g., 1024 bytes
 
+            self.manager.logger.info(f"Scheduling first chunk write")
+            self.manager.schedule_message(5, self.write_next_chunk)
+            return True
+        else:
+            self.manager.logger.info("Already writing to pipe, skipping...")
+            return False
+
+    def write_next_chunk(self):
+        """Write the next chunk of the message to the pipe."""
+        remaining_bytes = len(self.message_bytes) - self.total_written
+        if remaining_bytes > 0:
+            chunk = self.message_bytes[self.total_written:self.total_written + self.chunk_size]
+
+            try:
+                written = os.write(self.pipe_fd_write, chunk)
+                self.total_written += written
+                self.manager.logger.info(f"Chunk written: {written} bytes, Total: {self.total_written}/{len(self.message_bytes)}")
+
+                if self.total_written < len(self.message_bytes):
+                    # Schedule the next chunk to be written
+                    self.manager.schedule_message(5, self.write_next_chunk)
+                else:
+                    self.manager.logger.info("All chunks written successfully")
+                    self.is_writing = False
+
+            except Exception as e:
+                self.manager.logger.info(f"Write failed: {e}")
+                self.is_writing = False
+
+        else:
+            self.manager.logger.info("No remaining bytes to write")
+            self.is_writing = False
