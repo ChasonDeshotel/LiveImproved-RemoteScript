@@ -134,11 +134,49 @@ class IPCUtils(Component):
                 self.manager.logger.info("No data available in pipe")
                 return
 
-    def write_response(self, response: str):
+    def write_response(self, message: str):
         """Helper method to write a response to the response pipe."""
-        return self.write_to_pipe(response)
 
-    def write_to_pipe(self, response):
+        #start_marker = f"MESSAGE_{request_id}_START"
+        message_length = len(message)
+        start_marker = f"START_11111111{message_length:08d}"
+        end_marker = "END_OF_MESSAGE"
+        full_message = f"{start_marker}{message}{end_marker}"
+        return self.write_to_pipe(full_message)
+
+    def write_to_pipe(self, message):
+        self.manager.logger.info("calling write_to_pipe")
+
+        if not self.pipe_fd_write:
+            self.manager.logger.info("no write pipe exists")
+            return False
+
+        if self.is_writing == False:
+            self.manager.logger.info("calling write pipe")
+
+            self.is_writing = True
+            try:
+                self.manager.logger.info("calling os write")
+                os.write(self.pipe_fd_write, message.encode())
+                self.manager.logger.info("after os write")
+            except Exception as e:
+                self.manager.logger.info(f"write failed: {e}")
+                self.is_writing = False
+                return False
+
+            self.is_writing = False
+            self.manager.logger.info("wrote to pipe")
+            return True
+
+    def write_response_chunks(self, message):
+        """Helper method to write a response to the response pipe."""
+        message_length = len(message)
+        start_marker = f"START_11111111{message_length:08d}"
+        end_marker = "END_OF_MESSAGE"
+        full_message = f"{start_marker}{message}{end_marker}"
+        return self.write_to_pipe_chunks(full_message)
+
+    def write_to_pipe_chunks(self, message):
         self.manager.logger.info("calling write_to_pipe")
 
         if not self.pipe_fd_write:
@@ -149,15 +187,13 @@ class IPCUtils(Component):
             self.manager.logger.info("starting write process")
 
             self.is_writing = True
-            response_length = len(response)
-            header = f"{response_length:08d}"  # Create a 4-character wide header
-            message = header + response
+            self.manager.logger.info(f"writing message: {message}")
             self.message_bytes = message.encode()
             self.total_written = 0
-            self.chunk_size = 1024  # Define the chunk size, e.g., 1024 bytes
+            self.chunk_size = 8192
 
             self.manager.logger.info(f"Scheduling first chunk write")
-            self.manager.schedule_message(5, self.write_next_chunk)
+            self.manager.schedule_message(1, self.write_next_chunk)
             return True
         else:
             self.manager.logger.info("Already writing to pipe, skipping...")
@@ -188,3 +224,24 @@ class IPCUtils(Component):
         else:
             self.manager.logger.info("No remaining bytes to write")
             self.is_writing = False
+
+    def clear_pipe(pipe_path):
+        """Clear any existing data from the pipe."""
+        try:
+            # Open the pipe in non-blocking mode
+            with os.open(pipe_path, os.O_RDONLY | os.O_NONBLOCK) as pipe_fd:
+                while True:
+                    try:
+                        # Try to read a chunk of data
+                        data = os.read(pipe_fd, 4096)  # Adjust the buffer size if needed
+                        if not data:
+                            break  # Break the loop if no more data is available
+                    except OSError as e:
+                        if e.errno == errno.EAGAIN or e.errno == errno.EWOULDBLOCK:
+                            break  # No more data available to read
+                        else:
+                            raise  # Re-raise any other exceptions
+        except FileNotFoundError:
+            print(f"Pipe {pipe_path} not found.")
+        except Exception as e:
+            print(f"Error while clearing the pipe: {e}")
