@@ -38,7 +38,14 @@ class ActionHandler(Component):
         self.manager.tickInterval = 1;
 
     def plugins(self):
-        self.manager.ipc.write_response_chunks(",".join([item.name for item in self.manager.plugin_manager.loadable_items()]))
+        self.manager.ipc.write_response_chunks(
+            "|".join(
+                [
+                    f"{i},{item.name},{item.uri}"
+                    for i, item in enumerate(self.manager.plugin_manager.loadable_items())
+                ]
+            )
+        )
 
     def load_item(self, *items):
         self.logger.info(f"calling load_item with params: {', '.join(items)}")

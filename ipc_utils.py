@@ -43,8 +43,6 @@ class IPCUtils(Component):
         if not self.open_pipe_for_write(self.response_pipe_path, non_blocking=True):
             self.manager.logger.info("IPC::init_write() failed to open response pipe for writing")
 
-            self.manager.logger.info(f"scheduling the next write pipe check")
-            self.manager.schedule_message(1, self.init_write)
             return False
 
         self.write_response("READY")
@@ -212,7 +210,7 @@ class IPCUtils(Component):
 
                 if self.total_written < len(self.message_bytes):
                     # Schedule the next chunk to be written
-                    self.manager.schedule_message(5, self.write_next_chunk)
+                    self.manager.schedule_message(1, self.write_next_chunk)
                 else:
                     self.manager.logger.info("All chunks written successfully")
                     self.is_writing = False

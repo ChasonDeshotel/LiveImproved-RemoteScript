@@ -25,7 +25,7 @@ class PluginManager(Component):
                 return loadable_items
 
             if item.is_loadable:
-                f.write(f"{item.name},{item.uri},{item.is_loadable}\n")
+#                f.write(f"{item.name},{item.uri},{item.is_loadable}\n")
                 loadable_items.append(item)
             else:
                 if item.children:
@@ -43,7 +43,7 @@ class PluginManager(Component):
         application = Live.Application.get_application()
         browser = application.browser
 
-        f = open(os.path.join(self.manager.module_path, "loadable_items.txt"), "w")
+#        f = open(os.path.join(self.manager.module_path, "loadable_items.txt"), "w")
 
         try:
             #AU, VST, VST3
@@ -54,8 +54,8 @@ class PluginManager(Component):
             self.cached_plugin_data = loadable_items
             self.manager.logger.info(f"Cached {len(loadable_items)} loadable items successfully.")
 
-            for item in loadable_items:
-                self.manager.logger.info(f"Name: {item.name}, URI: {item.uri}, Loadable: {item.is_loadable}")
+            #for item in loadable_items:
+            #    self.manager.logger.info(f"Name: {item.name}, URI: {item.uri}, Loadable: {item.is_loadable}")
 
         except Exception as e:
             self.manager.logger.error(f"failed cache: {e}");

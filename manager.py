@@ -19,6 +19,12 @@ class Manager(ControlSurface):
     def __init__(self, c_instance):
         ControlSurface.__init__(self, c_instance)
 
+        self.max_ipc_retries   = 500
+        self.attempt           = 0
+        self.fast_ticks        = 1
+        self.slow_ticks        = 50
+        self.really_slow_ticks = 500
+
         self.logger = logger
         self.tickInterval = 5;
         self.module_path = os.path.dirname(os.path.realpath(__file__))
@@ -33,7 +39,8 @@ class Manager(ControlSurface):
             self.plugin_manager = PluginManager(self)
             self.action_handler = ActionHandler(self)
 
-        self.init()
+        self.schedule_message(5, self.init())
+
         self.plugin_manager.cache_plugins()
 
     def main_loop(self):
@@ -45,47 +52,37 @@ class Manager(ControlSurface):
             self.logger.info(f"data: {data}")
             self.action_handler.handle_request(data)
 
-        ##
-        ## TODO: receive a READY signal from the injected library
-        ## then shorten the tick
-        ##
         self.schedule_message(self.tickInterval, self.main_loop)
 
     def init(self):
         """Initialize the read and write pipes."""
+        self.logger.info(f"init ipc pipes. attempt {self.attempt}")
+
+        self.attempt += 1
+
         if not self.ipc.is_write_initialized:
             # loops until able to send READY
-            self.schedule_message(1, self.ipc.init_write)
+            self.ipc.init_write()
         
         if not self.ipc.is_read_initialized:
             # loops until request pipe is readable
-            self.schedule_message(1, self.ipc.init_read)
+            self.ipc.init_read()
 
         if self.ipc.is_read_initialized and self.ipc.is_write_initialized:
             self.logger.info("Both pipes initialized, starting the main loop")
             self.schedule_message(1, self.main_loop)
+            return True
         else:
-            self.logger.info("Pipes not yet initialized, rechecking...")
-            self.schedule_message(1, self.init)
+            self.logger.info("Pipes not yet initialized")
 
-#        app = Live.Application.get_application()
-#        logger.info(f"pointer: {hex(id(app))}")
-#
-#        live_ptr = app._live_ptr
-#        logger.info(f"_live_ptr: {hex(live_ptr)}")
-#
-#        browser = app.browser
-#        logger.info(f"pointer: {hex(id(browser))}")
-#
-#        browser_ptr = browser._live_ptr
-#        logger.info(f"browser._live_ptr: {hex(browser_ptr)}")
-#
-#        #self.read(self.pipe_fd_read)
-#        self.write(self.pipe_fd_write)
-#
-        # or export PYTHONPATH="/path/to/your/library:$PYTHONPATH"
-        # on windows: set PYTHONPATH=C:\path\to\your\library;%PYTHONPATH%
-#        import shared_memory
+            if self.attempt < 51:
+                self.schedule_message(self.fast_ticks, self.init)
+            elif self.attempt < 500:
+                self.schedule_message(self.slow_ticks, self.init)
+            else
+                self.schedule_message(self.really_slow_ticks, self.init)
+
+            return False
 
     def start_logging(self):
         """
