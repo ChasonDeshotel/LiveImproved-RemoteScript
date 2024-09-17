@@ -79,7 +79,7 @@ class Manager(ControlSurface):
                 self.schedule_message(self.fast_ticks, self.init)
             elif self.attempt < 500:
                 self.schedule_message(self.slow_ticks, self.init)
-            else
+            else:
                 self.schedule_message(self.really_slow_ticks, self.init)
 
             return False

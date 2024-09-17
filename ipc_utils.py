@@ -4,6 +4,7 @@ from typing import Optional, Tuple, Any
 import os
 import errno
 import select
+import platform
 
 class IPCUtils(Component):
     _instance = None
@@ -29,16 +30,16 @@ class IPCUtils(Component):
 
         # ableton script reads requests from lim_request
         # and responds to lim_response
-        self.response_pipe_path = os.path.join(self.manager.module_path, 'lim_response')
-        self.request_pipe_path = os.path.join(self.manager.module_path, 'lim_request')
+        if platform.system() == "Windows":
+            self.response_pipe_path = "\\.\pipe\lim_response"
+            self.request_pipe_path = "\\.\pipe\lim_request"
+        else:
+            self.response_pipe_path = os.path.join(self.manager.module_path, 'lim_response')
+            self.request_pipe_path = os.path.join(self.manager.module_path, 'lim_request')
 
     def init_write(self):
         """Try to write the 'READY' message to the response pipe."""
         self.manager.logger.info("IPC::init_write() called")
-
-        if not self.check_or_create_pipe(self.response_pipe_path):
-            self.logger.info("IPC::init_write() failed to create or find the response pipe")
-            return False
 
         if not self.open_pipe_for_write(self.response_pipe_path, non_blocking=True):
             self.manager.logger.info("IPC::init_write() failed to open response pipe for writing")
@@ -55,10 +56,6 @@ class IPCUtils(Component):
         """Initialize the read pipe to receive requests."""
         self.manager.logger.info("IPC::init_read() called")
 
-        if not self.check_or_create_pipe(self.request_pipe_path):
-            self.logger.info("IPC::init_read() failed to create or find the request pipe")
-            return False
-
         if not self.open_pipe_for_read(self.request_pipe_path, non_blocking=True):
             self.manager.logger.info("IPC::init_read() failed to open request pipe for reading")
             self.manager.logger.info("scheduling the next read pipe check")
@@ -69,49 +66,56 @@ class IPCUtils(Component):
         self.is_read_initialized = True
         return True
 
-    def check_or_create_pipe(self, pipe_name: str) -> bool:
-        """Check if the pipe exists, and if not, create it."""
-        if not os.path.exists(pipe_name):
-            try:
-                os.mkfifo(pipe_name)
-                self.manager.logger.info(f"Pipe created: {pipe_name}")
-                return True
-            except OSError as e:
-                self.manager.logger.info(f"Failed to create pipe: {pipe_name} - {e}")
-                return False
-        else:
-            self.logger.info(f"Pipe already exists: {pipe_name}")
-        return True
-
     def open_pipe_for_write(self, pipe_name: str, non_blocking: bool) -> bool:
         """Open the pipe for writing."""
-        flags = os.O_WRONLY
-        if non_blocking:
-            flags |= os.O_NONBLOCK
+        if platform.system() == "Windows":
+            # Use `open()` for Windows named pipes
+            mode = 'wb'
+            try:
+                self.pipe_fd_write = open(rf'{pipe_name}', mode, buffering=0)  # Unbuffered
+                self.manager.logger.info(f"Windows named pipe opened for writing: {pipe_name}")
+                return True
+            except Exception as e:
+                self.manager.logger.info(f"Failed to open named pipe for writing on Windows: {pipe_name} - {e}")
+                return False
+        else:
+            flags = os.O_WRONLY
+            if non_blocking:
+                flags |= os.O_NONBLOCK
 
-        try:
-            self.pipe_fd_write = os.open(pipe_name, flags)
-            self.manager.logger.info(f"Pipe opened for writing: {pipe_name}")
-            return True
-        except OSError as e:
-            self.manager.logger.info(f"Failed to open pipe for writing: {pipe_name} - {e}")
+            try:
+                self.pipe_fd_write = os.open(pipe_name, flags)
+                self.manager.logger.info(f"Pipe opened for writing: {pipe_name}")
+                return True
+            except OSError as e:
+                self.manager.logger.info(f"Failed to open pipe for writing: {pipe_name} - {e}")
             
         return False
 
     def open_pipe_for_read(self, pipe_name: str, non_blocking: bool) -> bool:
         """Open the pipe for reading."""
-        flags = os.O_RDONLY
-        if non_blocking:
-            flags |= os.O_NONBLOCK
+        if platform.system() == "Windows":
+            # Use `open()` for Windows named pipes
+            mode = 'rb'
+            try:
+                self.pipe_fd_write = open(rf'{pipe_name}', mode, buffering=0)  # Unbuffered
+                self.manager.logger.info(f"Windows named pipe opened for writing: {pipe_name}")
+                return True
+            except Exception as e:
+                self.manager.logger.info(f"Failed to open named pipe for writing on Windows: {pipe_name} - {e}")
+                return False
+        else:
+            flags = os.O_RDONLY
+            if non_blocking:
+                flags |= os.O_NONBLOCK
 
-        try:
-            self.pipe_fd_read = os.open(pipe_name, flags)
-            self.manager.logger.info(f"Pipe opened for reading: {pipe_name}")
-            return True
-        except OSError as e:
-            self.manager.logger.info(f"Failed to open pipe for reading: {pipe_name} - {e}")
-            return False
-
+            try:
+                self.pipe_fd_read = os.open(pipe_name, flags)
+                self.manager.logger.info(f"Pipe opened for reading: {pipe_name}")
+                return True
+            except OSError as e:
+                self.manager.logger.info(f"Failed to open pipe for reading: {pipe_name} - {e}")
+                return False
 
     def read_request(self):
         """Helper method to read a request from the request pipe."""
@@ -149,7 +153,7 @@ class IPCUtils(Component):
             self.manager.logger.info("no write pipe exists")
             return False
 
-        if self.is_writing == False:
+        if not self.is_writing:
             self.manager.logger.info("calling write pipe")
 
             self.is_writing = True
