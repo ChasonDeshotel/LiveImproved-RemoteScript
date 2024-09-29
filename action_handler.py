@@ -18,7 +18,12 @@ class ActionHandler(Component):
     def handle_request(self, request_str):
         self.logger.info(f"ActionHandler::handle_request - {request_str}")
 
-        commands = request_str.split(';')
+        # strip header
+        request_id = request_str[6:14]
+        message_size = int(request_str[14:22])
+        command_str = request_str[22:22 + message_size]
+
+        commands = command_str.split(';')
         parsed_commands = []
         for command in commands:
             parts = command.split(',')
@@ -29,15 +34,15 @@ class ActionHandler(Component):
         for action, params in parsed_commands:
             method = getattr(self, action, None)
         if callable(method):
-            method(*params)
+            method(request_id, *params)
         else:
             print(f"No such action: {action}")
 
-    def ready(self):
+    def ready(self, request_id):
         self.logger.info(f"library ready, increasing tick frequency")
         self.manager.tickInterval = 1;
 
-    def plugins(self):
+    def plugins(self, request_id):
         self.manager.ipc.write_response_chunks(
             "|".join(
                 [
@@ -45,9 +50,10 @@ class ActionHandler(Component):
                     for i, item in enumerate(self.manager.plugin_manager.loadable_items())
                 ]
             )
+            , request_id
         )
 
-    def load_item(self, *items):
+    def load_item(self, request_id, *items):
         self.logger.info(f"calling load_item with params: {', '.join(items)}")
         application = Live.Application.get_application()
         browser = application.browser

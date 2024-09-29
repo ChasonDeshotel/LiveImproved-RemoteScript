@@ -41,7 +41,9 @@ class Manager(ControlSurface):
 
         self.schedule_message(5, self.init())
 
-        self.plugin_manager.cache_plugins()
+        self.schedule_message(1, self.main_loop())
+
+        self.schedule_message(1, self.plugin_manager.cache_plugins())
 
     def main_loop(self):
         #self.logger.debug("main loop tick")
@@ -54,6 +56,16 @@ class Manager(ControlSurface):
 
         self.schedule_message(self.tickInterval, self.main_loop)
 
+    def wait_for_ready(self):
+        data = self.ipc.read_request()
+
+        if data and data == 'READY':
+            self.logger.info("READY received, starting main loop...");
+            return 1;
+
+        self.schedule_message(self.tickInterval, self.wait_for_ready)
+
+
     def init(self):
         """Initialize the read and write pipes."""
         self.logger.info(f"init ipc pipes. attempt {self.attempt}")
@@ -62,15 +74,23 @@ class Manager(ControlSurface):
 
         if not self.ipc.is_write_initialized:
             # loops until able to send READY
-            self.ipc.init_write()
+            self.schedule_message(1, self.ipc.init_write())
         
         if not self.ipc.is_read_initialized:
             # loops until request pipe is readable
-            self.ipc.init_read()
+            self.schedule_message(1, self.ipc.init_read())
 
+
+        # TODO logic to read/write READY before progressing
         if self.ipc.is_read_initialized and self.ipc.is_write_initialized:
-            self.logger.info("Both pipes initialized, starting the main loop")
-            self.schedule_message(1, self.main_loop)
+            self.logger.info("Both pipes initialized, waiting for READY...")
+
+            self.ipc.write_response("READY")
+            self.logger.info("READY written to response pipe...")
+
+            # TODO wait for response
+
+#            self.schedule_message(1, self.wait_for_ready)
             return True
         else:
             self.logger.info("Pipes not yet initialized")

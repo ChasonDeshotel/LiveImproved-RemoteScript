@@ -23,6 +23,9 @@ class IPCUtils(Component):
 
         self.is_read_initialized = False
 
+        self.request_id = 0
+        self.message_size = 0
+
         ##
         ##
         ## fix
@@ -38,7 +41,7 @@ class IPCUtils(Component):
             self.request_pipe_path = os.path.join(self.manager.module_path, 'lim_request')
 
     def init_write(self):
-        """Try to write the 'READY' message to the response pipe."""
+        """Initialize the write pipe to write responses."""
         self.manager.logger.info("IPC::init_write() called")
 
         if not self.open_pipe_for_write(self.response_pipe_path, non_blocking=True):
@@ -46,11 +49,9 @@ class IPCUtils(Component):
 
             return False
 
-        self.write_response("READY")
-        self.manager.logger.info("READY written to response pipe")
+        self.manager.logger.info("Response pipe successfully opened for writing")
         self.is_write_initialized = True
         return True
-
 
     def init_read(self):
         """Initialize the read pipe to receive requests."""
@@ -58,8 +59,6 @@ class IPCUtils(Component):
 
         if not self.open_pipe_for_read(self.request_pipe_path, non_blocking=True):
             self.manager.logger.info("IPC::init_read() failed to open request pipe for reading")
-            self.manager.logger.info("scheduling the next read pipe check")
-            self.manager.schedule_message(1, self.init_read)
             return False
 
         self.manager.logger.info("Request pipe successfully opened for reading")
@@ -119,11 +118,66 @@ class IPCUtils(Component):
 
     def read_request(self):
         """Helper method to read a request from the request pipe."""
-        self.manager.logger.info("read request")
+        self.manager.logger.info("Reading request from pipe")
         data = self.read_from_pipe(self.pipe_fd_read)
+
         if data:
-            return data.decode('utf-8')
+            # Decode and strip the newline for processing
+            decoded_data = data.decode('utf-8').strip()
+
+            # Example format: "START_0000000011111111"
+            if decoded_data.startswith("START_"):
+                try:
+                    # Extract the request ID and message size from the header
+                    request_id = decoded_data[6:14]
+                    message_size = int(decoded_data[14:22])
+                    command = decoded_data[22:22 + message_size]
+
+                    self.manager.logger.info(f"Request ID: {request_id}, Message Size: {message_size}")
+
+                    # Store the request ID for appending to the response
+                    self.current_request_id = request_id
+
+                    # Read the actual message
+                    #full_message = self.read_message_from_pipe(message_size)
+                    #return full_message
+                    return decoded_data
+
+                except ValueError:
+                    self.manager.logger.error("Invalid request format or message size")
+                    return None
+            else:
+                self.manager.logger.error("Invalid start of request")
+                return None
         return None
+
+#    def read_from_pipe(self, message_size):
+#        """Reads the actual message based on the message size."""
+#        data_buffer = []
+#        total_read = 0
+#
+#        while total_read < message_size:
+#            try:
+#                chunk = os.read(self.pipe_fd_read, 1024)
+#                if not chunk:
+#                    self.manager.logger.info("Pipe closed or no more data")
+#                    break
+#
+#                data_buffer.append(chunk)
+#                total_read += len(chunk)
+#
+#                self.manager.logger.info(f"Read {len(chunk)} bytes, total read: {total_read}/{message_size}")
+#
+#            except OSError as e:
+#                self.manager.logger.error(f"Error reading message from pipe: {e}")
+#                break
+#
+#        if total_read == message_size:
+#            # Successfully read the full message
+#            return b''.join(data_buffer)
+#        else:
+#            self.manager.logger.error("Message size mismatch or incomplete message received")
+#            return None
 
     def read_from_pipe(self, fh):
         rlist, _, _ = select.select([fh], [], [], 0)
@@ -141,7 +195,7 @@ class IPCUtils(Component):
 
         #start_marker = f"MESSAGE_{request_id}_START"
         message_length = len(message)
-        start_marker = f"START_11111111{message_length:08d}"
+        start_marker = f"START_{self.request_id}{message_length:08d}"
         end_marker = "END_OF_MESSAGE"
         full_message = f"{start_marker}{message}{end_marker}"
         return self.write_to_pipe(full_message)
@@ -170,10 +224,10 @@ class IPCUtils(Component):
             self.manager.logger.info("wrote to pipe")
             return True
 
-    def write_response_chunks(self, message):
+    def write_response_chunks(self, message, request_id):
         """Helper method to write a response to the response pipe."""
         message_length = len(message)
-        start_marker = f"START_11111111{message_length:08d}"
+        start_marker = f"START_{request_id}{message_length:08d}"
         end_marker = "END_OF_MESSAGE"
         full_message = f"{start_marker}{message}{end_marker}"
         return self.write_to_pipe_chunks(full_message)
