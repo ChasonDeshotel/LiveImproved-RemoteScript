@@ -40,7 +40,14 @@ class ActionHandler(Component):
 
     def ready(self, request_id):
         self.logger.info(f"library ready, increasing tick frequency")
-        self.manager.tickInterval = 1;
+        self.manager.tickInterval = 1
+        self.manager.ipc.write_response_chunks("SPAGHETTI", request_id)
+
+    def path(self, request_id):
+        self.manager.ipc.write_response_chunks(
+            self.manager.module_path
+            , request_id
+        )
 
     def plugins(self, request_id):
         self.manager.ipc.write_response_chunks(
@@ -64,3 +71,8 @@ class ActionHandler(Component):
                 browser.load_item(browser_item)
             except Exception as e:
                 self.manager.logger.error(f"Failed to load item {item}: {e}")
+
+        self.manager.ipc.write_response_chunks(
+            "success"
+            , request_id
+        )

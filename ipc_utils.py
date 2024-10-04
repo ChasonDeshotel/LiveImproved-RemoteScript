@@ -180,6 +180,10 @@ class IPCUtils(Component):
 #            return None
 
     def read_from_pipe(self, fh):
+        if self.pipe_fd_read is None:
+            self.manager.logger.info("Pipe read file descriptor is None. Check pipe initialization.")
+            return
+
         rlist, _, _ = select.select([fh], [], [], 0)
         if rlist:
             data = os.read(fh, 1024)

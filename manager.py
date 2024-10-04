@@ -39,11 +39,11 @@ class Manager(ControlSurface):
             self.plugin_manager = PluginManager(self)
             self.action_handler = ActionHandler(self)
 
-        self.schedule_message(5, self.init())
+        self.schedule_message(5, self.init)
 
-        self.schedule_message(1, self.main_loop())
+        self.schedule_message(1, self.main_loop)
 
-        self.schedule_message(1, self.plugin_manager.cache_plugins())
+        self.schedule_message(1, self.plugin_manager.cache_plugins)
 
     def main_loop(self):
         #self.logger.debug("main loop tick")
@@ -74,11 +74,11 @@ class Manager(ControlSurface):
 
         if not self.ipc.is_write_initialized:
             # loops until able to send READY
-            self.schedule_message(1, self.ipc.init_write())
+            self.schedule_message(1, self.ipc.init_write)
         
         if not self.ipc.is_read_initialized:
             # loops until request pipe is readable
-            self.schedule_message(1, self.ipc.init_read())
+            self.schedule_message(1, self.ipc.init_read)
 
 
         # TODO logic to read/write READY before progressing
