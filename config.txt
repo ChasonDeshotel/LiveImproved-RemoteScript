@@ -1,0 +1,40 @@
+# Keyboard shortcuts
+app-shortcuts:
+  leader: cmd+b
+
+# Remap keyboard shortcuts
+remap:
+  cmd+shift+e: tilePluginWindows
+  cmd+w: closeFocusedPlugin
+  cmd+shift+w: closeAllPlugins
+  cmd+shift+o: openAllPlugins
+  d: delete
+  cmd+i: cmd+a, plugin.Serum
+  shift+d: 0
+  cmd+e: cmd+shift+m
+  cmd+b: cmd+d, cmd+d, cmd+d, cmd+d
+  # fuse
+  f: cmd+j
+  cmd+e: searchbox
+
+# Plugins
+rename-plugins:
+  Serum: Daddy Duda's Special Synth
+
+remove-plugins:
+  - TerribleSynth
+  - I'mTooLazyToUninstallSynth
+
+# Quick shortcuts menu
+shortcuts:
+  - key: /location/to/shortcut/1
+  - otherkey: /location/to/shortcut/2
+
+# Application behavior
+init:
+  retries: 10
+
+window:
+  - search: 100,200,500,500
+  - preferences: 50,150,200,300
+
