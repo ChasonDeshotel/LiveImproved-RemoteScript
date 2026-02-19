@@ -41,16 +41,17 @@ class ActionHandler(Component):
     def ready(self, request_id):
         self.logger.info(f"library ready, increasing tick frequency")
         self.manager.tickInterval = 1
-        self.manager.ipc.write_response_chunks("SPAGHETTI", request_id)
+        self.manager.ipc.send("SPAGHETTI", request_id)
 
     def path(self, request_id):
-        self.manager.ipc.write_response_chunks(
+        self.manager.ipc.send(
             self.manager.module_path
             , request_id
         )
 
     def plugins(self, request_id):
-        self.manager.ipc.write_response_chunks(
+        self.logger.info("plugins response")
+        self.manager.ipc.send(
             "|".join(
                 [
                     f"{i},{item.name},{item.uri}"
@@ -60,19 +61,17 @@ class ActionHandler(Component):
             , request_id
         )
 
+
     def load_item(self, request_id, *items):
-        self.logger.info(f"calling load_item with params: {', '.join(items)}")
-        application = Live.Application.get_application()
-        browser = application.browser
-
-        for item in items:
-            try:
-                browser_item = self.manager.plugin_manager.cached_plugin_data[int(item)]
-                browser.load_item(browser_item)
-            except Exception as e:
-                self.manager.logger.error(f"Failed to load item {item}: {e}")
-
-        self.manager.ipc.write_response_chunks(
-            "success"
-            , request_id
-        )
+        def impl():
+            self.logger.info(f"calling load_item with params: {', '.join(items)}")
+            browser = self.manager.liveApp.browser
+            for item in items:
+                try:
+                    browser_item = self.manager.plugin_manager.cached_plugin_data[int(item)]
+                    browser.load_item(browser_item)
+                except Exception as e:
+                    self.manager.logger.error(f"Failed to load item {item}: {e}")
+            self.manager.ipc.send("success", request_id)
+        
+        self.manager.schedule_message(0, impl)

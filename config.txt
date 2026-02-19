@@ -9,13 +9,26 @@ remap:
   cmd+shift+w: closeAllPlugins
   cmd+shift+o: openAllPlugins
   d: delete
-  cmd+i: cmd+a, plugin.Serum
   shift+d: 0
+  cmd+i: cmd+a, plugin.Serum
   cmd+e: cmd+shift+m
   cmd+b: cmd+d, cmd+d, cmd+d, cmd+d
   # fuse
   f: cmd+j
   cmd+e: searchbox
+  t: cmd+t
+  cmd+t: cmd+shift+t
+  cmd+h: h
+  h: leftarrow
+  j: downarrow
+  k: uparrow
+  l: rightarrow
+  shift+h: shift+leftarrow
+  shift+j: shift+downarrow
+  shift+k: shift+uparrow
+  shift+l: shift+rightarrow
+  y: cmd+c
+  p: cmd+v
 
 # Plugins
 rename-plugins:
