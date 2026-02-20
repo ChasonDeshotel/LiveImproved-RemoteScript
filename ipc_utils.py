@@ -99,7 +99,7 @@ class TCPTransport(Component):
 
     def _read_loop(self):
         if not self.sock:
-            return
+            self.manager.init()
 
         while not self._stop_event.is_set():
             try:
@@ -112,6 +112,9 @@ class TCPTransport(Component):
                     # server disconnected
                     self.logger.warn("Server disconnected")
                     self.sock = None
+                    self.is_read_initialized = False
+                    self.is_write_initialized = False
+                    self.manager.init()
                     break
             except OSError:
                 time.sleep(0.01)

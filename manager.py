@@ -118,6 +118,7 @@ class Manager(ControlSurface):
     def init(self):
         """Initialize the read and write pipes."""
         self.logger.info("IPC init started")
+        self.attempt = 0;
 
         while not (self.ipc.is_read_initialized and self.ipc.is_write_initialized):
             self.logger.info(f"init ipc. attempt {self.attempt}")
